@@ -1,0 +1,14 @@
+providers:
+  - id: deepseek-main
+    protocol: openai
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    models:
+      - deepseek-chat
+      - deepseek-reasoner
+  - id: ollama-local
+    protocol: ollama
+    base_url: http://localhost:11434
+    api_key_env: DEEPSEEK_API_KEY
+    models:
+      - qwen2.5:0.5b
