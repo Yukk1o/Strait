@@ -1,0 +1,31 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - unused
+    - gofmt
+    - goimports
+    - gocyclo
+    - nakedret
+    - unconvert
+    - ineffassign
+    - misspell
+    - prealloc
+    - nolintlint
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  nakedret:
+    max-func-lines: 40
+  errcheck:
+    exclude-functions:
+      - (net/http.Response).Body.Close
+      - io.Closer.Close
+      - os.File.Close
