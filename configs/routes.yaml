@@ -1,0 +1,21 @@
+routes:
+  - id: deepseek-chat
+    match:
+      model: deepseek-chat
+    target:
+      provider: deepseek-main
+      model: deepseek-chat
+
+  - id: deepseek-reasoner
+    match:
+      model: deepseek-reasoner
+    target:
+      provider: deepseek-main
+      model: deepseek-reasoner
+
+  - id: ollama-qwen
+    match:
+      model: qwen2.5:0.5b
+    target:
+      provider: ollama-local
+      model: qwen2.5:0.5b

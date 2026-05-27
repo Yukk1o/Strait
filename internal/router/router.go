@@ -1,0 +1,170 @@
+package router
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"sync"
+
+	"strait/internal/config"
+
+	"strait/api"
+
+	"github.com/goccy/go-yaml"
+)
+
+// providerYAML 定义了提供者的 YAML 配置结构
+type providerYAML struct {
+	ID        string   `yaml:"id"`          // 唯一标识
+	Protocol  string   `yaml:"protocol"`    // 调用协议：openAI / anthropic / deepseek / ollama
+	BaseURL   string   `yaml:"base_url"`    // API 接口地址
+	APIKeyEnv string   `yaml:"api_key_env"` // 存储 API Key 的环境变量名
+	Models    []string `yaml:"models"`      // 支持的模型名称列表
+}
+
+// routeYAML 定义路由规则的 YAML 配置结构
+type routeYAML struct {
+	ID     string     `yaml:"id"`     // 路由唯一标识
+	Match  matchYAML  `yaml:"match"`  // 匹配表达式（模型名或通配符）
+	Target targetYAML `yaml:"target"` // 路由目标
+}
+
+// matchYAML 定义匹配规则的 YAML 配置结构
+type matchYAML struct {
+	Model string `yaml:"model"` // 匹配的模型名称
+}
+
+// targetYAML 定义路由指向的目标提供者与模型
+type targetYAML struct {
+	Provider string `yaml:"provider"` // 目标提供者 ID
+	Model    string `yaml:"model"`    // 目标模型名称
+}
+
+// Router 定义了路由器结构
+type Router struct {
+	mu            sync.RWMutex            // 读写锁
+	providers     map[string]providerYAML // 提供者配置映射
+	routes        []routeYAML             // 路由规则列表
+	providersPath string
+	routesPath    string
+}
+
+func (r *Router) ID() string { return "router-yaml" }
+
+func init() {
+	api.Register("router-yaml", func() api.Plugin { return &Router{} })
+}
+
+func (r *Router) loadConfig() (map[string]providerYAML, []routeYAML, error) {
+	// 1. 读取并解析提供者配置
+	data, err := os.ReadFile(r.providersPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read providers.yaml failed: %w", err)
+	}
+
+	var ps struct {
+		Providers []providerYAML `yaml:"providers"`
+	}
+	if err := yaml.Unmarshal(data, &ps); err != nil {
+		return nil, nil, fmt.Errorf("unmarshal providers failed: %w", err)
+	}
+
+	// 2. 加载提供者数据并合法性校验
+	r.providers = make(map[string]providerYAML)
+	for _, p := range ps.Providers {
+		if p.ID == "" {
+			return nil, nil, errors.New("provider ID cannot be empty")
+		}
+		if _, exists := r.providers[p.ID]; exists {
+			return nil, nil, fmt.Errorf("duplicate provider ID: %s", p.ID)
+		}
+		r.providers[p.ID] = p
+	}
+
+	// 3. 读取并解析路由规则
+	data, err = os.ReadFile(r.routesPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read routes.yaml failed: %w", err)
+	}
+
+	var rs struct {
+		Routes []routeYAML `yaml:"routes"`
+	}
+	if err := yaml.Unmarshal(data, &rs); err != nil {
+		return nil, nil, fmt.Errorf("unmarshal routes failed: %w", err)
+	}
+
+	// 4. 校验路由关联有效性
+	for _, route := range rs.Routes {
+		providerID := route.Target.Provider
+		if _, exists := r.providers[providerID]; !exists {
+			return nil, nil, fmt.Errorf("route %s references unknown provider: %s", route.ID, providerID)
+		}
+	}
+	return r.providers, rs.Routes, nil
+}
+
+func (r *Router) Init(cfg map[string]any) error {
+	r.providersPath = config.ProvidersPath
+	r.routesPath = config.RoutesPath
+
+	if v, ok := cfg["providers_path"].(string); ok {
+		r.providersPath = v
+	}
+	if v, ok := cfg["routes_path"].(string); ok {
+		r.routesPath = v
+	}
+
+	return r.Reload()
+}
+
+func (r *Router) Reload() error {
+	newProviders, newRouters, err := r.loadConfig()
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	r.providers = newProviders
+	r.routes = newRouters
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *Router) Route(_ context.Context, model string) (*api.RouteDecision, error) {
+	r.mu.RLock()
+	var provider *providerYAML
+	for _, rt := range r.routes {
+		if rt.Match.Model == model {
+			if p, ok := r.providers[rt.Target.Provider]; ok {
+				provider = &p
+			}
+			break
+		}
+	}
+	r.mu.RUnlock()
+
+	if provider == nil {
+		return nil, &api.PluginError{
+			Code:      "NO_ROUTE",
+			Message:   fmt.Sprintf("no route for model: %s", model),
+			Retryable: false,
+		}
+	}
+
+	apiKey := os.Getenv(provider.APIKeyEnv)
+	if apiKey == "" {
+		return nil, &api.PluginError{
+			Code:      "NO_ROUTE",
+			Message:   fmt.Sprintf("provider %s API key not set in env %s", provider.ID, provider.APIKeyEnv),
+			Retryable: false,
+		}
+	}
+
+	return &api.RouteDecision{
+		Protocol: provider.Protocol,
+		BaseURL:  provider.BaseURL,
+		APIKey:   apiKey,
+	}, nil
+}

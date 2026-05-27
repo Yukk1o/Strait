@@ -1,0 +1,12 @@
+plugins:
+  - id: router-yaml
+    type: router
+  - id: adapter-openai
+    type: adapter
+  - id: auth-static-token
+    type: authenticator
+    config:
+      token: sk-admin-init
+      subject: admin
+  - id: adapter-ollama
+    type: adapter
