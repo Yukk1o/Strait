@@ -1,0 +1,27 @@
+# 编译产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+/strait
+/tmp/
+
+# GoLand
+.idea/
+
+# 运行时数据
+/data/
+*.db
+*.db-journal
+
+# 环境变量
+.env
+.env.local
+
+# 依赖缓存
+vendor/
+
+# 内部文档
+docs/internal/

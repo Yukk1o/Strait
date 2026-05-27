@@ -1,0 +1,11 @@
+server:
+  port: 8080
+  mode: debug
+
+database:
+  driver: sqlite
+  sqlite:
+    path: "./data/strait.db"
+
+auth:
+  init_admin_key: "sk-admin-init"
