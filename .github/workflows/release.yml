@@ -22,6 +22,8 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -o build/strait-linux-arm64 ./cmd/strait/
           GOOS=darwin GOARCH=amd64 go build -o build/strait-darwin-amd64 ./cmd/strait/
           GOOS=darwin GOARCH=arm64 go build -o build/strait-darwin-arm64 ./cmd/strait/
+          GOOS=windows GOARCH=amd64 go build -o build/strait-windows-amd64.exe ./cmd/strait/
+          GOOS=windows GOARCH=arm64 go build -o build/strait-windows-arm64.exe ./cmd/strait/
 
       - name: Create release
         uses: softprops/action-gh-release@v2
