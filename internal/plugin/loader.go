@@ -32,6 +32,7 @@ func NewLoader(path string) *Loader {
 	return &Loader{configPath: path}
 }
 
+// Build 构建插件管理器
 func (l *Loader) Build() (*Manager, error) {
 	slog.Info("starting plugin loader", "config_path", l.configPath)
 
@@ -51,7 +52,10 @@ func (l *Loader) Build() (*Manager, error) {
 	var router api.Router
 	for _, entry := range cfg.Plugins {
 		if err := l.loadPlugin(entry, m, &router); err != nil {
-			return nil, err
+			if isCriticalType(entry.Type) {
+				return nil, err
+			}
+			slog.Warn("optional plugin skipped", "id", entry.ID, "type", entry.Type, "error", err)
 		}
 	}
 
@@ -59,37 +63,71 @@ func (l *Loader) Build() (*Manager, error) {
 		m.SetRouter(router)
 	}
 
-	slog.Info(
-		"all plugins loaded successfully",
-		"router_loaded", router != nil,
-		"authenticator_count", len(m.authenticators),
-		"adapter_count", len(m.adapters),
-	)
 	return m, nil
 }
 
+// isCriticalType 判断插件类型是否为关键类型，加载失败必须退出
+func isCriticalType(t string) bool {
+	switch t {
+	case "router", "adapter", "authenticator":
+		return true
+	default:
+		return false
+	}
+}
+
+// loadPlugin 加载插件
 func (l *Loader) loadPlugin(entry pluginEntry, m *Manager, router *api.Router) error {
-	slog.Info("loading plugin", "id", entry.ID, "type", entry.Type)
+	slog.Debug("loading plugin", "id", entry.ID, "type", entry.Type)
 
 	p, ok := api.CreatePlugin(entry.ID)
 	if !ok {
 		return fmt.Errorf("plugin not registered: %s", entry.ID)
 	}
 
-	// 初始化插件
 	if err := p.Init(entry.Config); err != nil {
 		return fmt.Errorf("plugin %s init failed: %w", entry.ID, err)
 	}
 
-	// 根据类型进行分类
+	if err := registerPlugin(entry, p, m, router); err != nil {
+		return err
+	}
+	return nil
+}
+
+// registerPlugin 注册插件
+func registerPlugin(entry pluginEntry, p api.Plugin, m *Manager, router *api.Router) error {
 	switch entry.Type {
+	case "authenticator":
+		auth, ok := p.(api.Authenticator)
+		if !ok {
+			return fmt.Errorf("plugin %s is not an Authenticator", entry.ID)
+		}
+		m.AddAuthenticator(auth)
+	case "guard":
+		guard, ok := p.(api.Guard)
+		if !ok {
+			return fmt.Errorf("plugin %s is not a Guard", entry.ID)
+		}
+		m.AddGuard(guard)
+	case "preprocessor":
+		pre, ok := p.(api.PreProcessor)
+		if !ok {
+			return fmt.Errorf("plugin %s is not a PreProcessor", entry.ID)
+		}
+		m.AddPreProcessor(pre)
 	case "router":
 		r, ok := p.(api.Router)
 		if !ok {
 			return fmt.Errorf("plugin %s is not a Router", entry.ID)
 		}
 		*router = r
-		slog.Info("router plugin loaded", "id", entry.ID)
+	case "postprocessor":
+		post, ok := p.(api.PostProcessor)
+		if !ok {
+			return fmt.Errorf("plugin %s is not a PostProcessor", entry.ID)
+		}
+		m.AddPostProcessor(post)
 	case "adapter":
 		a, ok := p.(api.ChatAdapter)
 		if !ok {
@@ -98,16 +136,11 @@ func (l *Loader) loadPlugin(entry pluginEntry, m *Manager, router *api.Router) e
 		if err := m.AddAdapter(a); err != nil {
 			return err
 		}
-		slog.Info("adapter plugin loaded", "id", entry.ID, "protocol", a.Protocol())
-	case "authenticator":
-		auth, ok := p.(api.Authenticator)
-		if !ok {
-			return fmt.Errorf("plugin %s is not an Authenticator", entry.ID)
-		}
-		m.AddAuthenticator(auth)
-		slog.Info("authenticator plugin loaded", "id", entry.ID)
+		slog.Debug("adapter plugin loaded", "id", entry.ID, "protocol", a.Protocol())
+		return nil
 	default:
 		return fmt.Errorf("unknown plugin type: %s", entry.Type)
 	}
+	slog.Debug(entry.Type+" plugin loaded", "id", entry.ID)
 	return nil
 }

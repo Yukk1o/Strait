@@ -89,14 +89,26 @@ type ToolCallFunction struct {
 
 // RouteDecision 路由决策
 type RouteDecision struct {
-	Protocol string `json:"protocol"` // 调用协议：openAI / anthropic / deepseek / ollama
-	BaseURL  string `json:"base_url"` // 调用地址
-	APIKey   string `json:"api_key"`  // 认证密钥
+	Protocol string `json:"protocol"`        // 调用协议：openAI / anthropic / deepseek / ollama
+	BaseURL  string `json:"base_url"`        // 调用地址
+	APIKey   string `json:"api_key"`         // 认证密钥
+	Model    string `json:"model,omitempty"` // 目标模型名称
 }
 
 // Subject 认证后的调用方信息
 type Subject struct {
 	ID string `json:"id"` // 调用方唯一标识
+}
+
+// ─ 管线 ─
+
+// PipelineContext 管线上下文，贯穿 guard → preprocess → route → adapter → postprocess 全流程
+type PipelineContext struct {
+	Context  context.Context // 请求上下文
+	Request  any             // 请求体：*ChatRequest / *EmbeddingRequest / ...
+	Response any             // 响应体：*ChatResponse / *EmbeddingResponse / ...
+	Route    *RouteDecision  // 路由决策
+	Meta     map[string]any  // 插件间传递的元数据
 }
 
 // ─ Context ─

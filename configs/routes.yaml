@@ -2,9 +2,19 @@ routes:
   - id: deepseek-chat
     match:
       model: deepseek-chat
+    strategy: weight
     target:
       provider: deepseek-main
-      model: deepseek-chat
+      model: deepseek-reasoner
+    targets:
+      - provider: deepseek-main
+        model: deepseek-chat
+        priority: 1
+        weight: 3
+      - provider: ollama-local
+        model: qwen2.5:0.5b
+        priority: 1
+        weight: 1
 
   - id: deepseek-reasoner
     match:
@@ -16,6 +26,9 @@ routes:
   - id: ollama-qwen
     match:
       model: qwen2.5:0.5b
-    target:
-      provider: ollama-local
-      model: qwen2.5:0.5b
+    strategy: priority
+    targets:
+      - provider: ollama-local
+        model: qwen2.5:0.5b
+        priority: 1
+        weight: 1
