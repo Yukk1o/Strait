@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"sync"
 
@@ -23,11 +24,21 @@ type providerYAML struct {
 	Models    []string `yaml:"models"`      // 支持的模型名称列表
 }
 
+// targetYAML 定义路由指向的目标提供者与模型
+type targetYAML struct {
+	Provider string `yaml:"provider"` // 目标提供者 ID
+	Model    string `yaml:"model"`    // 目标模型名称
+	Priority int    `yaml:"priority"` // 路由优先级
+	Weight   int    `yaml:"weight"`   // 路由权重
+}
+
 // routeYAML 定义路由规则的 YAML 配置结构
 type routeYAML struct {
-	ID     string     `yaml:"id"`     // 路由唯一标识
-	Match  matchYAML  `yaml:"match"`  // 匹配表达式（模型名或通配符）
-	Target targetYAML `yaml:"target"` // 路由目标
+	ID       string       `yaml:"id"`       // 路由唯一标识
+	Match    matchYAML    `yaml:"match"`    // 匹配表达式（模型名或通配符）
+	Target   targetYAML   `yaml:"target"`   // 路由目标
+	Targets  []targetYAML `yaml:"targets"`  // 路由目标列表
+	Strategy string       `yaml:"strategy"` // 路由策略(priority / weight)
 }
 
 // matchYAML 定义匹配规则的 YAML 配置结构
@@ -35,19 +46,13 @@ type matchYAML struct {
 	Model string `yaml:"model"` // 匹配的模型名称
 }
 
-// targetYAML 定义路由指向的目标提供者与模型
-type targetYAML struct {
-	Provider string `yaml:"provider"` // 目标提供者 ID
-	Model    string `yaml:"model"`    // 目标模型名称
-}
-
 // Router 定义了路由器结构
 type Router struct {
 	mu            sync.RWMutex            // 读写锁
 	providers     map[string]providerYAML // 提供者配置映射
 	routes        []routeYAML             // 路由规则列表
-	providersPath string
-	routesPath    string
+	providersPath string                  // 提供者配置文件路径
+	routesPath    string                  // 路由规则文件路径
 }
 
 func (r *Router) ID() string { return "router-yaml" }
@@ -97,9 +102,18 @@ func (r *Router) loadConfig() (map[string]providerYAML, []routeYAML, error) {
 
 	// 4. 校验路由关联有效性
 	for _, route := range rs.Routes {
-		providerID := route.Target.Provider
-		if _, exists := r.providers[providerID]; !exists {
-			return nil, nil, fmt.Errorf("route %s references unknown provider: %s", route.ID, providerID)
+		targets := route.Targets
+		if len(targets) == 0 {
+			if route.Target.Provider == "" {
+				return nil, nil, fmt.Errorf("route %s has no target", route.ID)
+			}
+			targets = []targetYAML{route.Target}
+		}
+		for _, target := range targets {
+			providerID := target.Provider
+			if _, exists := r.providers[providerID]; !exists {
+				return nil, nil, fmt.Errorf("route %s references unknown provider: %s", route.ID, providerID)
+			}
 		}
 	}
 	return r.providers, rs.Routes, nil
@@ -134,37 +148,78 @@ func (r *Router) Reload() error {
 
 func (r *Router) Route(_ context.Context, model string) (*api.RouteDecision, error) {
 	r.mu.RLock()
-	var provider *providerYAML
+	defer r.mu.RUnlock()
 	for _, rt := range r.routes {
-		if rt.Match.Model == model {
-			if p, ok := r.providers[rt.Target.Provider]; ok {
-				provider = &p
+		if rt.Match.Model != model {
+			continue
+		}
+
+		// 获取 targets 列表
+		targets := rt.Targets
+		if len(targets) == 0 {
+			targets = []targetYAML{rt.Target}
+		}
+
+		// 按 strategy 选择
+		selected := r.selectTarget(targets, rt.Strategy)
+
+		if p, ok := r.providers[selected.Provider]; ok {
+			apiKey := os.Getenv(p.APIKeyEnv)
+			if apiKey == "" {
+				return nil, &api.PluginError{
+					Code:      "NO_ROUTE",
+					Message:   fmt.Sprintf("provider %s API key not set in env %s", p.ID, p.APIKeyEnv),
+					Retryable: false,
+				}
 			}
-			break
+			return &api.RouteDecision{
+				Protocol: p.Protocol,
+				BaseURL:  p.BaseURL,
+				APIKey:   apiKey,
+			}, nil
 		}
 	}
-	r.mu.RUnlock()
+	return nil, &api.PluginError{
+		Code:      "NO_ROUTE",
+		Message:   fmt.Sprintf("no route for model: %s", model),
+		Retryable: false,
+	}
+}
 
-	if provider == nil {
-		return nil, &api.PluginError{
-			Code:      "NO_ROUTE",
-			Message:   fmt.Sprintf("no route for model: %s", model),
-			Retryable: false,
-		}
+func (r *Router) selectTarget(targets []targetYAML, strategy string) targetYAML {
+	if len(targets) == 1 {
+		return targets[0]
 	}
 
-	apiKey := os.Getenv(provider.APIKeyEnv)
-	if apiKey == "" {
-		return nil, &api.PluginError{
-			Code:      "NO_ROUTE",
-			Message:   fmt.Sprintf("provider %s API key not set in env %s", provider.ID, provider.APIKeyEnv),
-			Retryable: false,
+	switch strategy {
+	case "priority":
+		// 按优先级选择
+		best := targets[0]
+		for _, t := range targets {
+			if t.Priority < best.Priority {
+				best = t
+			}
+		}
+		return best
+	case "weight":
+		// 按权重选择
+		return r.selectByWeight(targets)
+	default:
+		return r.selectTarget(targets, "priority")
+	}
+}
+
+func (r *Router) selectByWeight(targets []targetYAML) targetYAML {
+	totalWeight := 0
+	for _, t := range targets {
+		totalWeight += t.Weight
+	}
+	randWeight := rand.Intn(totalWeight)
+	for _, t := range targets {
+		randWeight -= t.Weight
+		if randWeight < 0 {
+			return t
 		}
 	}
-
-	return &api.RouteDecision{
-		Protocol: provider.Protocol,
-		BaseURL:  provider.BaseURL,
-		APIKey:   apiKey,
-	}, nil
+	return targets[0]
 }
