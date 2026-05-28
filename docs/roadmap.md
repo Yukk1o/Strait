@@ -22,9 +22,9 @@
 | **P2 生产可用性** | ✅ | 鉴权 + 错误模型 + 热重载 + 统一内部模型 + OpenAI 输出格式 |
 | **P3 Agent 协议** | ✅ | Function Calling + Tool Use + Tool Calls 响应 |
 | **P4 多供应商** | 🚧 | Ollama 适配 ✅ / 负载均衡（优先级/权重）✅ / Anthropic + Gemini 适配 ⏳ / 熔断 ⏳ |
-| **P5 管道扩展** | ⏳ | PreProcessor / PostProcessor 接口 + 模型分组路由 |
+| **P5 管道扩展** | 🚧 | Guard / PreProcessor / PostProcessor 接口 ✅ + 模型分组路由 ⏳ |
 | **P6 持久化** | ⏳ | SQLite + Repository 层 + 管理 API CRUD + Playground |
-| **P7 生产部署** | 🚧 | Docker ✅ + K8s 部署 ✅ + Prometheus /metrics ✅ + 优雅关闭 ⏳ + 限流 ⏳ |
+| **P7 生产部署** | 🚧 | Docker ✅ + K8s 部署 ✅ + Prometheus /metrics ✅ + 优雅关闭 ✅ + 限流 ⏳ |
 | **P8 扩展协议** | ⏳ | Embedding 透传 / MCP 端点 / Rerank 适配 |
 
 ### 内核关键里程碑
@@ -49,6 +49,7 @@ Strait 所有组成部分都是插件——Router、Adapter、Authenticator、Gu
 | adapter-openai | Adapter | ✅ | OpenAI 兼容协议适配 |
 | adapter-ollama | Adapter | ✅ | Ollama 本地模型适配 |
 | auth-static-token | Authenticator | ✅ | 静态 Token 鉴权 |
+| prompt-injector | PreProcessor | ✅ | 系统提示词自动注入 |
 
 ### 开发中
 
@@ -57,7 +58,6 @@ Strait 所有组成部分都是插件——Router、Adapter、Authenticator、Gu
 | adapter-anthropic | Adapter | P4 | Claude 协议适配 |
 | adapter-gemini | Adapter | P4 | Gemini 协议适配 |
 | rate-limiter | Guard | P5 | 令牌桶 / 滑动窗口限流 |
-| prompt-injector | PreProcessor | P5 | 系统提示词自动注入 |
 | audit-logger | PostProcessor | P5 | 请求-响应审计记录 |
 | cost-tracker | PostProcessor | P5 | Token 用量和成本统计 |
 

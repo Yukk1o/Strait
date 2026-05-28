@@ -29,6 +29,21 @@ type ChatAdapter interface {
 	SendChatStream(ctx context.Context, payload *ChatRequest, route *RouteDecision) (<-chan *StreamChunk, error)
 }
 
+type Guard interface {
+	Plugin
+	Guard(pctx *PipelineContext) error
+}
+
+type PreProcessor interface {
+	Plugin
+	PreProcess(pctx *PipelineContext) error
+}
+
+type PostProcessor interface {
+	Plugin
+	PostProcess(pctx *PipelineContext) error
+}
+
 // Constructor 插件构造函数
 type Constructor func() Plugin
 

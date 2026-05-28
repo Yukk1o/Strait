@@ -10,3 +10,7 @@ plugins:
       subject: admin
   - id: adapter-ollama
     type: adapter
+  - id: prompt-injector
+    type: preprocessor
+    config:
+      system_prompt: "You are a helpful assistant."

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,19 +12,26 @@ import (
 	"syscall"
 	"time"
 
-	"strait/internal/metrics"
-
-	"strait/internal/config"
-
-	"strait/internal/hotreload"
-
 	"strait/internal/app"
+	"strait/internal/config"
+	"strait/internal/hotreload"
+	"strait/internal/metrics"
 	"strait/internal/plugin"
 	"strait/internal/router"
 	_ "strait/plugins/adapter-ollama"
 	_ "strait/plugins/adapter-openai"
 	_ "strait/plugins/auth-static-token"
+	_ "strait/plugins/prompt-injector"
 )
+
+const banner = `
+███████╗████████╗██████╗  █████╗ ██╗████████╗
+██╔════╝╚══██╔══╝██╔══██╗██╔══██╗██║╚══██╔══╝
+███████╗   ██║   ██████╔╝███████║██║   ██║
+╚════██║   ██║   ██╔══██╗██╔══██║██║   ██║
+███████║   ██║   ██║  ██║██║  ██║██║   ██║
+╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝  v0.2
+`
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -34,6 +42,14 @@ func main() {
 	m, err := loader.Build()
 	if err != nil {
 		slog.Error("startup failed", "error", err)
+		os.Exit(1)
+	}
+
+	if os.Getenv("STRAIT_BANNER") != "false" {
+		fmt.Print(banner)
+		fmt.Println(" Plugins:")
+		fmt.Print(m.Summary())
+		fmt.Println()
 	}
 
 	scheduler := plugin.NewScheduler(m)

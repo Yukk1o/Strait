@@ -43,14 +43,35 @@ func (s *Scheduler) executeAuth(ctx context.Context) error {
 	}
 }
 
-func (s *Scheduler) executePipeline(ctx context.Context, model string) (*api.RouteDecision, string, error) {
+func (s *Scheduler) executePipeline(ctx context.Context, model string, req any) (*api.RouteDecision, string, error) {
+	// auth
 	if err := s.executeAuth(ctx); err != nil {
 		return nil, "", err
 	}
+
+	pctx := &api.PipelineContext{Context: ctx, Request: req, Meta: make(map[string]any)}
+
+	// guard
+	for _, g := range s.manager.Load().Guards() {
+		if err := g.Guard(pctx); err != nil {
+			return nil, "", err
+		}
+	}
+
+	// preprocess
+	for _, p := range s.manager.Load().PreProcessors() {
+		if err := p.PreProcess(pctx); err != nil {
+			return nil, "", err
+		}
+	}
+
+	// route
 	decision, err := s.manager.Load().Router().Route(ctx, model)
 	if err != nil {
 		return nil, "", err
 	}
+	pctx.Route = decision
+
 	if decision.Model != "" {
 		return decision, decision.Model, nil
 	}
@@ -59,17 +80,24 @@ func (s *Scheduler) executePipeline(ctx context.Context, model string) (*api.Rou
 
 // ExecuteChat 执行完整 chat 管线：鉴权 → 路由 → 协议适配。
 func (s *Scheduler) ExecuteChat(ctx context.Context, payload *api.ChatRequest) (*api.ChatResponse, error) {
-	decision, actualModel, a, err := s.resolveAdapter(ctx, payload.Model)
+	decision, actualModel, a, err := s.resolveAdapter(ctx, payload.Model, payload)
 	if err != nil {
 		return nil, err
 	}
 	payload.Model = actualModel
-	return a.SendChat(ctx, payload, decision)
+	resp, err := a.SendChat(ctx, payload, decision)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.executePostProcess(ctx, payload, resp, decision); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // ExecuteChatStream 执行流式 chat 管线，返回响应 channel。
 func (s *Scheduler) ExecuteChatStream(ctx context.Context, payload *api.ChatRequest) (<-chan *api.StreamChunk, error) {
-	decision, actualModel, a, err := s.resolveAdapter(ctx, payload.Model)
+	decision, actualModel, a, err := s.resolveAdapter(ctx, payload.Model, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +105,10 @@ func (s *Scheduler) ExecuteChatStream(ctx context.Context, payload *api.ChatRequ
 	return a.SendChatStream(ctx, payload, decision)
 }
 
-func (s *Scheduler) resolveAdapter(ctx context.Context, model string) (*api.RouteDecision, string, api.ChatAdapter, error) {
-	decision, actualModel, err := s.executePipeline(ctx, model)
+func (s *Scheduler) resolveAdapter(ctx context.Context, model string, req any) (*api.RouteDecision, string, api.ChatAdapter,
+	error,
+) {
+	decision, actualModel, err := s.executePipeline(ctx, model, req)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -91,4 +121,21 @@ func (s *Scheduler) resolveAdapter(ctx context.Context, model string) (*api.Rout
 		}
 	}
 	return decision, actualModel, a, nil
+}
+
+func (s *Scheduler) executePostProcess(ctx context.Context, req any, resp any, decision *api.RouteDecision) error {
+	postprocessors := s.manager.Load().PostProcessors()
+	if len(postprocessors) == 0 {
+		return nil
+	}
+	pctx := &api.PipelineContext{
+		Context: ctx, Request: req, Response: resp, Route: decision,
+		Meta: make(map[string]any),
+	}
+	for _, p := range postprocessors {
+		if err := p.PostProcess(pctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
