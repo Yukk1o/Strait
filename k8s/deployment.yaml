@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: strait
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: strait
+  template:
+    metadata:
+      labels:
+        app: strait
+    spec:
+      containers:
+      - name: strait
+        image: strait:latest
+        envFrom:
+          - secretRef:
+              name: strait-secret
+        ports:
+          - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        volumeMounts:
+          - name: config
+            mountPath: /app/configs
+      volumes:
+        - name: config
+          configMap:
+            name: strait-config

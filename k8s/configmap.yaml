@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: strait-config
+data:
+  plugins.yaml: |
+    plugins:
+      - id: router-yaml
+        type: router
+      - id: adapter-openai
+        type: adapter
+      - id: adapter-ollama
+        type: adapter
+      - id: auth-static-token
+        type: authenticator
+  providers.yaml : |
+    # 参考提供者配置
+    providers:
+    - id: deepseek-main
+      protocol: openai
+      base_url: https://api.deepseek.com/v1
+      api_key_env: DEEPSEEK_API_KEY
+      models:
+        - deepseek-chat
+        - deepseek-reasoner
+    - id: ollama-local
+      protocol: ollama
+      base_url: http://localhost:11434
+      api_key_env: DEEPSEEK_API_KEY
+      models:
+        - qwen2.5:0.5b
+  routes.yaml : |
+    # 参考路由配置
+    routes:
+      - id: deepseek-chat
+        match:
+          model: deepseek-chat
+        target:
+          provider: deepseek-main
+          model: deepseek-chat
+    
+      - id: deepseek-reasoner
+        match:
+          model: deepseek-reasoner
+        target:
+          provider: deepseek-main
+          model: deepseek-reasoner
+    
+      - id: ollama-qwen
+        match:
+          model: qwen2.5:0.5b
+        target:
+          provider: ollama-local
+          model: qwen2.5:0.5b
