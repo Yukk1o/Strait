@@ -43,43 +43,52 @@ func (s *Scheduler) executeAuth(ctx context.Context) error {
 	}
 }
 
-func (s *Scheduler) executePipeline(ctx context.Context, model string) (*api.RouteDecision, error) {
+func (s *Scheduler) executePipeline(ctx context.Context, model string) (*api.RouteDecision, string, error) {
 	if err := s.executeAuth(ctx); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return s.manager.Load().Router().Route(ctx, model)
+	decision, err := s.manager.Load().Router().Route(ctx, model)
+	if err != nil {
+		return nil, "", err
+	}
+	if decision.Model != "" {
+		return decision, decision.Model, nil
+	}
+	return decision, model, nil
 }
 
 // ExecuteChat 执行完整 chat 管线：鉴权 → 路由 → 协议适配。
 func (s *Scheduler) ExecuteChat(ctx context.Context, payload *api.ChatRequest) (*api.ChatResponse, error) {
-	decision, err := s.executePipeline(ctx, payload.Model)
+	decision, actualModel, a, err := s.resolveAdapter(ctx, payload.Model)
 	if err != nil {
 		return nil, err
 	}
-	a, ok := s.manager.Load().Adapter(decision.Protocol)
-	if !ok {
-		return nil, &api.PluginError{
-			Code:      "adapter_not_found",
-			Message:   fmt.Sprintf("adapter not found: %s", decision.Protocol),
-			Retryable: false,
-		}
-	}
+	payload.Model = actualModel
 	return a.SendChat(ctx, payload, decision)
 }
 
 // ExecuteChatStream 执行流式 chat 管线，返回响应 channel。
 func (s *Scheduler) ExecuteChatStream(ctx context.Context, payload *api.ChatRequest) (<-chan *api.StreamChunk, error) {
-	decision, err := s.executePipeline(ctx, payload.Model)
+	decision, actualModel, a, err := s.resolveAdapter(ctx, payload.Model)
 	if err != nil {
 		return nil, err
 	}
+	payload.Model = actualModel
+	return a.SendChatStream(ctx, payload, decision)
+}
+
+func (s *Scheduler) resolveAdapter(ctx context.Context, model string) (*api.RouteDecision, string, api.ChatAdapter, error) {
+	decision, actualModel, err := s.executePipeline(ctx, model)
+	if err != nil {
+		return nil, "", nil, err
+	}
 	a, ok := s.manager.Load().Adapter(decision.Protocol)
 	if !ok {
-		return nil, &api.PluginError{
+		return nil, "", nil, &api.PluginError{
 			Code:      "adapter_not_found",
 			Message:   fmt.Sprintf("adapter not found: %s", decision.Protocol),
 			Retryable: false,
 		}
 	}
-	return a.SendChatStream(ctx, payload, decision)
+	return decision, actualModel, a, nil
 }

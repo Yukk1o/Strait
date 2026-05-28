@@ -1,10 +1,11 @@
-// Strait — AI 代理网关入口。
+// main Strait — AI 代理网关入口。
 package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"strait/internal/metrics"
 
@@ -21,10 +22,14 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	loader := plugin.NewLoader(config.PluginsPath)
 	m, err := loader.Build()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("startup failed", "error", err)
 	}
 
 	scheduler := plugin.NewScheduler(m)
@@ -52,7 +57,10 @@ func main() {
 		_ = watcher.Start(context.Background())
 	}()
 
-	server := app.NewServer(scheduler, met)
-	log.Println("strait listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", server.Handler()))
+	server := app.NewServer(scheduler)
+	slog.Info("strait listening on :8080")
+	if err := http.ListenAndServe(":8080", server.Handler()); err != nil {
+		slog.Error("server crashed", "error", err)
+		os.Exit(1)
+	}
 }

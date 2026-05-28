@@ -21,10 +21,10 @@
 | **P1 插件加载器** | ✅ | Loader + 自动注册 + 配置驱动 + 启动日志 |
 | **P2 生产可用性** | ✅ | 鉴权 + 错误模型 + 热重载 + 统一内部模型 + OpenAI 输出格式 |
 | **P3 Agent 协议** | ✅ | Function Calling + Tool Use + Tool Calls 响应 |
-| **P4 多供应商** | 🚧 | Ollama 适配 ✅ / Anthropic + Gemini 适配 ⏳ / 负载均衡 + 熔断 ⏳ |
+| **P4 多供应商** | 🚧 | Ollama 适配 ✅ / 负载均衡（优先级/权重）✅ / Anthropic + Gemini 适配 ⏳ / 熔断 ⏳ |
 | **P5 管道扩展** | ⏳ | PreProcessor / PostProcessor 接口 + 模型分组路由 |
 | **P6 持久化** | ⏳ | SQLite + Repository 层 + 管理 API CRUD + Playground |
-| **P7 生产部署** | ⏳ | Docker + 优雅关闭 + Prometheus + 限流 |
+| **P7 生产部署** | 🚧 | Docker ✅ + K8s 部署 ✅ + Prometheus /metrics ✅ + 优雅关闭 ⏳ + 限流 ⏳ |
 | **P8 扩展协议** | ⏳ | Embedding 透传 / MCP 端点 / Rerank 适配 |
 
 ### 内核关键里程碑
@@ -45,7 +45,7 @@ Strait 所有组成部分都是插件——Router、Adapter、Authenticator、Gu
 
 | 插件 | 类型 | 状态 | 说明 |
 |------|------|------|------|
-| router-yaml | Router | ✅ | YAML 配置路由匹配 |
+| router-yaml | Router | ✅ | YAML 配置路由匹配 + 多目标 + 优先级/权重策略 |
 | adapter-openai | Adapter | ✅ | OpenAI 兼容协议适配 |
 | adapter-ollama | Adapter | ✅ | Ollama 本地模型适配 |
 | auth-static-token | Authenticator | ✅ | 静态 Token 鉴权 |
