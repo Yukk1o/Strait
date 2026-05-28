@@ -43,7 +43,7 @@ type routeYAML struct {
 
 // matchYAML 定义匹配规则的 YAML 配置结构
 type matchYAML struct {
-	Model string `yaml:"model"` // 匹配的模型名称
+	Model string `yaml:"model"` // 请求匹配的模型名称
 }
 
 // Router 定义了路由器结构
@@ -176,6 +176,7 @@ func (r *Router) Route(_ context.Context, model string) (*api.RouteDecision, err
 				Protocol: p.Protocol,
 				BaseURL:  p.BaseURL,
 				APIKey:   apiKey,
+				Model:    selected.Model,
 			}, nil
 		}
 	}

@@ -89,9 +89,10 @@ type ToolCallFunction struct {
 
 // RouteDecision 路由决策
 type RouteDecision struct {
-	Protocol string `json:"protocol"` // 调用协议：openAI / anthropic / deepseek / ollama
-	BaseURL  string `json:"base_url"` // 调用地址
-	APIKey   string `json:"api_key"`  // 认证密钥
+	Protocol string `json:"protocol"`        // 调用协议：openAI / anthropic / deepseek / ollama
+	BaseURL  string `json:"base_url"`        // 调用地址
+	APIKey   string `json:"api_key"`         // 认证密钥
+	Model    string `json:"model,omitempty"` // 目标模型名称
 }
 
 // Subject 认证后的调用方信息
