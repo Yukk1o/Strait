@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	"strait/internal/metrics"
+
 	"strait/internal/config"
 
 	"strait/internal/hotreload"
@@ -31,6 +33,7 @@ func main() {
 	}
 
 	scheduler := plugin.NewScheduler(m)
+	met := metrics.NewMetrics()
 
 	reload := func(filename string) error {
 		if filename == "plugins.yaml" {
