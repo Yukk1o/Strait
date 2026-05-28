@@ -57,7 +57,7 @@ func main() {
 		_ = watcher.Start(context.Background())
 	}()
 
-	server := app.NewServer(scheduler)
+	server := app.NewServer(scheduler, met)
 	slog.Info("strait listening on :8080")
 	if err := http.ListenAndServe(":8080", server.Handler()); err != nil {
 		slog.Error("server crashed", "error", err)
