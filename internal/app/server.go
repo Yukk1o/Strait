@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"strait/internal/metrics"
+
 	"strait/api"
 	"strait/internal/plugin"
 )
@@ -18,11 +20,12 @@ import (
 // （辅助理解）相当于 Java 的 @RestController + @Autowired
 type Server struct {
 	scheduler *plugin.Scheduler
+	metrics   *metrics.Metrics
 }
 
 // NewServer 创建 HTTP 服务
-func NewServer(s *plugin.Scheduler) *Server {
-	return &Server{scheduler: s}
+func NewServer(s *plugin.Scheduler, m *metrics.Metrics) *Server {
+	return &Server{scheduler: s, metrics: m}
 }
 
 // Handler 注册路由，返回 http.Handler
@@ -31,6 +34,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.healthHandler)
 	mux.HandleFunc("GET /ready", s.readyHandler)
 	mux.HandleFunc("POST /v1/chat/completions", s.chatHandler)
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		if _, err := fmt.Fprint(w, s.metrics.Handler()); err != nil {
+			slog.Error("write metrics failed", "error", err)
+		}
+	})
 	return mux
 }
 
@@ -45,6 +54,7 @@ func (s *Server) readyHandler(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) chatHandler(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	reqID := generateReqID()
+	s.metrics.IncRequests("POST", "/v1/chat/completions")
 
 	var req api.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
