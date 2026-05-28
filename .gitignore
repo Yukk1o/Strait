@@ -19,6 +19,7 @@
 # 环境变量
 .env
 .env.local
+k8s/secret.yaml
 
 # 依赖缓存
 vendor/

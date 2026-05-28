@@ -1,0 +1,8 @@
+services:
+  strait:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs:/app/configs
+    restart: unless-stopped
