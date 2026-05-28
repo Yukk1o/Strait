@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 
+	"strait/internal/metrics"
+
 	"strait/internal/config"
 
 	"strait/internal/hotreload"
@@ -26,6 +28,7 @@ func main() {
 	}
 
 	scheduler := plugin.NewScheduler(m)
+	met := metrics.NewMetrics()
 
 	reload := func(filename string) error {
 		if filename == "plugins.yaml" {
@@ -49,7 +52,7 @@ func main() {
 		_ = watcher.Start(context.Background())
 	}()
 
-	server := app.NewServer(scheduler)
+	server := app.NewServer(scheduler, met)
 	log.Println("strait listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", server.Handler()))
 }
