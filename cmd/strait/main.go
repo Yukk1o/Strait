@@ -3,9 +3,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"strait/internal/metrics"
 
@@ -57,10 +61,30 @@ func main() {
 		_ = watcher.Start(context.Background())
 	}()
 
+	// 启动 HTTP 服务
 	server := app.NewServer(scheduler, met)
-	slog.Info("strait listening on :8080")
-	if err := http.ListenAndServe(":8080", server.Handler()); err != nil {
-		slog.Error("server crashed", "error", err)
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: server.Handler(),
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		slog.Info("strait listening on :8080")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server crashed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("shutdown failed", "error", err)
+	}
+	slog.Info("strait stopped")
 }
