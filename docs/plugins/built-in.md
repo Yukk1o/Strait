@@ -15,7 +15,7 @@ Strait 提供 4 个内置插件，启动即用。
 
 ## router-yaml
 
-根据 `routes.yaml` 中的路由规则，将请求匹配到对应的 provider。
+根据 `routes.yaml` 中的路由规则，将请求匹配到对应的 provider。支持多目标路由、优先级/权重策略选择。
 
 ```yaml
 # plugins.yaml
@@ -23,6 +23,8 @@ plugins:
   - id: router-yaml
     type: router
 ```
+
+### 单目标（兼容旧格式）
 
 ```yaml
 # routes.yaml
@@ -35,8 +37,43 @@ routes:
       model: deepseek-chat           # 实际请求上游的模型名
 ```
 
+### 多目标路由
+
+一个路由规则可以指向多个 provider，通过策略选择最终目标：
+
+```yaml
+routes:
+  - id: deepseek-chat
+    match:
+      model: deepseek-chat
+    strategy: priority               # 策略：priority（优先级）/ weight（权重）
+    targets:
+      - provider: deepseek-main      # 优先级数字越小越优先
+        model: deepseek-chat
+        priority: 1
+        weight: 3                    # 同优先级内按权重随机
+      - provider: deepseek-backup
+        model: deepseek-chat
+        priority: 2
+        weight: 1
+```
+
+### 路由策略
+
+| 策略 | 说明 |
+|------|------|
+| `priority` | 按优先级选择，数字越小越优先（默认） |
+| `weight` | 按权重随机选择，权重越大被选中概率越高 |
+
+### 模型映射
+
+`targets` 中的 `model` 字段可指定目标 provider 的实际模型名，实现请求模型到上游模型的映射。例如请求 `model: gpt-4` 可映射到 `deepseek-chat`。
+
+### 特性
+
 - **无需额外配置** — 直接声明 `type: router` 即可加载
 - **支持热重载** — 修改 `routes.yaml` 后自动生效
+- **兼容旧格式** — 单目标 `target` 字段仍然有效
 
 ---
 

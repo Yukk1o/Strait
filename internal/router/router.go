@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
+	"strings"
 	"sync"
 
 	"strait/internal/config"
@@ -103,6 +105,9 @@ func (r *Router) loadConfig() (map[string]providerYAML, []routeYAML, error) {
 	// 4. 校验路由关联有效性
 	for _, route := range rs.Routes {
 		targets := route.Targets
+		if len(route.Targets) > 0 && route.Target.Provider != "" {
+			slog.Warn("both target and targets defined, using targets", "route", route.ID)
+		}
 		if len(targets) == 0 {
 			if route.Target.Provider == "" {
 				return nil, nil, fmt.Errorf("route %s has no target", route.ID)
@@ -149,42 +154,71 @@ func (r *Router) Reload() error {
 func (r *Router) Route(_ context.Context, model string) (*api.RouteDecision, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	for _, rt := range r.routes {
-		if rt.Match.Model != model {
-			continue
-		}
-
-		// 获取 targets 列表
-		targets := rt.Targets
-		if len(targets) == 0 {
-			targets = []targetYAML{rt.Target}
-		}
-
-		// 按 strategy 选择
-		selected := r.selectTarget(targets, rt.Strategy)
-
-		if p, ok := r.providers[selected.Provider]; ok {
-			apiKey := os.Getenv(p.APIKeyEnv)
-			if apiKey == "" {
-				return nil, &api.PluginError{
-					Code:      "NO_ROUTE",
-					Message:   fmt.Sprintf("provider %s API key not set in env %s", p.ID, p.APIKeyEnv),
-					Retryable: false,
-				}
-			}
-			return &api.RouteDecision{
-				Protocol: p.Protocol,
-				BaseURL:  p.BaseURL,
-				APIKey:   apiKey,
-				Model:    selected.Model,
-			}, nil
+		if rt.Match.Model == model {
+			return r.resolveRoute(rt, model)
 		}
 	}
+
+	for _, rt := range r.routes {
+		if strings.Contains(rt.Match.Model, "*") && matchModel(rt.Match.Model, model) {
+			return r.resolveRoute(rt, model)
+		}
+	}
+
 	return nil, &api.PluginError{
 		Code:      "NO_ROUTE",
 		Message:   fmt.Sprintf("no route for model: %s", model),
 		Retryable: false,
 	}
+}
+
+func (r *Router) resolveRoute(rt routeYAML, model string) (*api.RouteDecision, error) {
+	// 获取 targets 列表
+	targets := rt.Targets
+	if len(targets) == 0 {
+		targets = []targetYAML{rt.Target}
+	}
+
+	// 按 strategy 选择
+	selected := r.selectTarget(targets, rt.Strategy)
+
+	if p, ok := r.providers[selected.Provider]; ok {
+		apiKey := os.Getenv(p.APIKeyEnv)
+		if apiKey == "" {
+			return nil, &api.PluginError{
+				Code:      "NO_ROUTE",
+				Message:   fmt.Sprintf("provider %s API key not set in env %s", p.ID, p.APIKeyEnv),
+				Retryable: false,
+			}
+		}
+
+		slog.Info("route selected", "route", rt.ID, "model", model, "provider", selected.Provider, "strategy", rt.Strategy)
+
+		return &api.RouteDecision{
+			Protocol: p.Protocol,
+			BaseURL:  p.BaseURL,
+			APIKey:   apiKey,
+			Model:    selected.Model,
+		}, nil
+	}
+
+	return nil, &api.PluginError{
+		Code:      "NO_ROUTE",
+		Message:   fmt.Sprintf("no route for model: %s", model),
+		Retryable: false,
+	}
+}
+
+func matchModel(pattern, model string) bool {
+	if pattern == "*" {
+		return true
+	}
+	if strings.HasSuffix(pattern, "*") {
+		return strings.HasPrefix(model, strings.TrimSuffix(pattern, "*"))
+	}
+	return pattern == model
 }
 
 func (r *Router) selectTarget(targets []targetYAML, strategy string) targetYAML {

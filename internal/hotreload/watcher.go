@@ -50,15 +50,14 @@ func (w *Watcher) Start(ctx context.Context) error {
 			}
 			timer = time.AfterFunc(500*time.Millisecond, func() {
 				if err := w.reload(filepath.Base(name)); err != nil {
-					slog.Error("HotReload failed", "error", err)
+					slog.Error("hot reload failed", "error", err)
 				} else {
 					slog.Info("config reloaded")
 				}
 			})
 
 		case err := <-watcher.Errors:
-			slog.Error("HotReload watcher error", "error", err)
-
+			slog.Error("hot reload watcher error", "error", err)
 		case <-ctx.Done():
 			return nil
 		}
