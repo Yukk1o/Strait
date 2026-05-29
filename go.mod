@@ -1,6 +1,6 @@
 module strait
 
-go 1.25.0
+go 1.26.3
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect

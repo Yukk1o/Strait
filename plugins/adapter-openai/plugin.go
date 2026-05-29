@@ -83,6 +83,17 @@ func init() {
 	api.Register("adapter-openai", func() api.Plugin { return &Adapter{} })
 }
 
+func (a *Adapter) Descriptor() api.PluginDescriptor {
+	return api.PluginDescriptor{
+		ID:          "adapter-openai",
+		Type:        "adapter",
+		Description: "OpenAI API 协议适配器",
+		Version:     "0.3.0",
+		Priority:    100,
+		FailMode:    api.FailStrict,
+	}
+}
+
 func (a *Adapter) Init(config map[string]any) error {
 	a.client = &http.Client{}
 	return nil

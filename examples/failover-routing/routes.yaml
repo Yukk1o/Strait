@@ -1,0 +1,14 @@
+routes:
+  - id: deepseek-chat
+    match:
+      model: deepseek-chat
+    strategy: weight
+    targets:
+      - provider: deepseek-main
+        model: deepseek-chat
+        priority: 1
+        weight: 3
+      - provider: ollama-local
+        model: qwen2.5:0.5b
+        priority: 1
+        weight: 1

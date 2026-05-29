@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,8 +31,19 @@ const banner = `
 ███████╗   ██║   ██████╔╝███████║██║   ██║
 ╚════██║   ██║   ██╔══██╗██╔══██║██║   ██║
 ███████║   ██║   ██║  ██║██║  ██║██║   ██║
-╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝  v0.2
+╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝  v0.3
 `
+
+func writeManifest(m *plugin.Manager) {
+	data, err := json.MarshalIndent(m.Manifest(), "", "  ")
+	if err != nil {
+		slog.Error("marshal manifest failed", "error", err)
+		return
+	}
+	if err := os.WriteFile("manifest.json", data, 0o644); err != nil {
+		slog.Error("write manifest failed", "error", err)
+	}
+}
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -44,6 +56,7 @@ func main() {
 		slog.Error("startup failed", "error", err)
 		os.Exit(1)
 	}
+	writeManifest(m)
 
 	if os.Getenv("STRAIT_BANNER") != "false" {
 		fmt.Print(banner)
@@ -62,6 +75,7 @@ func main() {
 				return err
 			}
 			scheduler.ReloadManager(newM)
+			writeManifest(newM)
 			m = newM
 			return nil
 		}

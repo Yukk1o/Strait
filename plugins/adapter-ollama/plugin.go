@@ -57,6 +57,17 @@ func init() {
 	api.Register("adapter-ollama", func() api.Plugin { return &Adapter{} })
 }
 
+func (a *Adapter) Descriptor() api.PluginDescriptor {
+	return api.PluginDescriptor{
+		ID:          "adapter-ollama",
+		Type:        "adapter",
+		Description: "Ollama API 协议适配器",
+		Version:     "0.3.0",
+		Priority:    100,
+		FailMode:    api.FailStrict,
+	}
+}
+
 func (a *Adapter) Init(config map[string]any) error {
 	a.client = &http.Client{}
 	return nil

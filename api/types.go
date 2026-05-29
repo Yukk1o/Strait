@@ -34,6 +34,27 @@ type ChatRequest struct {
 	Tools    []ToolDefinition `json:"tools,omitempty"` // 工具列表
 }
 
+func CopyChatRequest(src *ChatRequest) *ChatRequest {
+	cp := *src
+
+	cp.Messages = make([]Message, len(src.Messages))
+	for i, m := range src.Messages {
+		cp.Messages[i] = m
+		if src.Tools != nil {
+			cp.Tools = make([]ToolDefinition, len(src.Tools))
+			for i, t := range src.Tools {
+				cp.Tools[i] = t
+				if t.Function.Parameters != nil {
+					cp.Tools[i].Function.Parameters = make(json.RawMessage, len(t.Function.Parameters))
+					copy(cp.Tools[i].Function.Parameters, t.Function.Parameters)
+				}
+			}
+		}
+	}
+
+	return &cp
+}
+
 // ChatResponse 标准化响应体
 type ChatResponse struct {
 	ID      string   `json:"id"`      // 请求唯一标识
@@ -47,6 +68,7 @@ type StreamChunk struct {
 	Choices []Choice `json:"choices"` // 流式块内增量数据
 	Model   string   `json:"model"`   // 实际使用的模型
 	Usage   *Usage   `json:"usage"`   // 用量信息（仅最后一条携带）
+	Err     error    `json:"-"`
 }
 
 // Usage Token 用量统计
@@ -104,6 +126,7 @@ type Subject struct {
 
 // PipelineContext 管线上下文，贯穿 guard → preprocess → route → adapter → postprocess 全流程
 type PipelineContext struct {
+	TraceID  string          // 请求唯一标识
 	Context  context.Context // 请求上下文
 	Request  any             // 请求体：*ChatRequest / *EmbeddingRequest / ...
 	Response any             // 响应体：*ChatResponse / *EmbeddingResponse / ...
@@ -124,4 +147,17 @@ func WithAuthToken(ctx context.Context, token string) context.Context {
 func AuthTokenFrom(ctx context.Context) string {
 	t, _ := ctx.Value(authTokenKey).(string)
 	return t
+}
+
+type traceIDKey struct{}
+
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, traceIDKey{}, traceID)
+}
+
+func TraceIDFrom(ctx context.Context) string {
+	if v, ok := ctx.Value(traceIDKey{}).(string); ok {
+		return v
+	}
+	return ""
 }

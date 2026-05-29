@@ -16,6 +16,29 @@ func init() {
 	api.Register("prompt-injector", func() api.Plugin { return &PromptInjector{} })
 }
 
+func (p *PromptInjector) Descriptor() api.PluginDescriptor {
+	return api.PluginDescriptor{
+		ID:          "prompt-injector",
+		Type:        "preprocessor",
+		Description: "系统提示词注入插件",
+		Version:     "0.3.0",
+		Priority:    50,
+		FailMode:    api.FailStrict,
+		ConfigSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"system_prompt": map[string]any{
+					"type":        "string",
+					"description": "注入的系统提示词",
+				},
+			},
+		},
+		DefaultConfig: map[string]any{
+			"system_prompt": "You are a helpful assistant.",
+		},
+	}
+}
+
 func (p *PromptInjector) Init(cfg map[string]any) error {
 	if v, ok := cfg["system_prompt"].(string); ok {
 		p.SystemPrompt = v

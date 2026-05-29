@@ -1,35 +1,49 @@
 # Strait
 
-> AI 流经此处 — 插件驱动的 AI 网关
+> Not a proxy. An operating system for your AI traffic.
+
+English | [中文](README.zh.md)
 
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev/)
 
-## 功能
+Strait is a plugin-driven AI request pipeline framework. It exposes an OpenAI-compatible API and routes requests through a six-stage plugin pipeline — authentication, guard, preprocessing, routing, adaptation, and post-processing — where every stage is programmable through Go plugins.
 
-| 功能 | 状态 |
-|------|------|
-| OpenAI 兼容 API 入口 | ✅ |
-| YAML 配置路由 | ✅ |
-| 流式响应 (SSE) | ✅ |
-| 插件系统 (Router / Adapter / Authenticator) | ✅ |
-| 插件加载器 | ✅ |
-| 鉴权 | ✅ |
-| 热重载 | ✅ |
-| 统一错误模型 | ✅ |
-| 统一内部模型 + OpenAI 输出格式 | ✅ |
-| Function Calling 透传 | ✅ |
-| Ollama 适配 | ✅ |
-| 多供应商 + 负载均衡 | ⏳ 规划中 |
-| 管理 API + Playground | ⏳ 规划中 |
-| 插件生态 (限流 / 审计 / 成本管控 ...) | ⏳ 规划中 |
+## Why Strait?
 
-详见 [Roadmap](docs/roadmap.md)。
+- **Not a thin proxy** — full six-stage request pipeline with guard, pre/post-processing stages
+- **Not config-only** — write real Go logic for complex behaviors (PII detection, content filtering, cost tracking)
+- **Not fragile** — plugin failure strategies (strict / skip / fallback), request deep-copy isolation, TraceID tracing
+- **Multi-provider** — route to OpenAI, Ollama, or any backend via YAML config, with priority/weight failover
 
-## 快速开始
+## Architecture
+
+```
+  Request ──▶ [Auth] ──▶ [Guard] ──▶ [Pre] ──▶ [Route] ──▶ [Adapter] ──▶ [Post] ──▶ Response
+                                                    │
+                                              ┌─────┴─────┐
+                                              │  Router    │
+                                              └─────┬─────┘
+                                         ┌──────────┼──────────┐
+                                      OpenAI    Ollama      ...
+```
+
+| Stage | Purpose | Example |
+|-------|---------|---------|
+| **Auth** | Token validation | `auth-static-token` |
+| **Guard** | Rate limiting, IP blacklist, PII detection | — |
+| **PreProcess** | Prompt injection, context enrichment | `prompt-injector` |
+| **Route** | Model routing, A/B testing, failover | `router-yaml` |
+| **Adapter** | Protocol conversion, backend calls | `adapter-openai`, `adapter-ollama` |
+| **PostProcess** | Logging, token accounting, content filtering | — |
+
+Plugins are sorted by priority (lower first). Failure is handled by each plugin's declared strategy — no boilerplate needed.
+
+## Quick Start
 
 ```bash
+go build -o strait ./cmd/strait/
 export DEEPSEEK_API_KEY=sk-xxx
-go run ./cmd/strait/
+./strait
 ```
 
 ```bash
@@ -39,33 +53,44 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-```bash
-# 流式
-curl -N http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer sk-admin-init" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"hello"}],"stream":true}'
+## Write a Plugin
+
+Implement `Plugin` + one stage interface, declare a `Descriptor()`, register via `api.Register()`. ~30 lines total.
+
+```go
+func (r *RateLimiter) Guard(pctx *api.PipelineContext) error {
+    if r.count++; r.count > r.limit {
+        return api.NewPluginError(api.ErrCodeRateLimited, "too many requests", true)
+    }
+    return nil
+}
 ```
 
-## 配置
+See [Plugin Development Guide](docs/en/developer/plugin-dev.md) for the full API reference.
 
-编辑 `configs/` 下的 YAML 文件：
+## Examples
 
-- `plugins.yaml` — 插件列表及配置（Router、Adapter、Authenticator 等）
-- `providers.yaml` — AI 供应商定义（URL、API Key 环境变量名、模型列表）
-- `routes.yaml` — 路由规则（model → provider 映射）
+- **Weighted routing** — split `deepseek-chat` requests across Deepseek (75%) and local Ollama (25%) via YAML config
+- **System prompt injection** — prepend a unified system prompt to every request, zero client changes
+- **Static token auth** — protect endpoints with a fixed bearer token for internal deployments
 
-修改 `providers.yaml` 或 `routes.yaml` 后保存，服务自动热加载。
+See [examples/](examples/) for working configs and code.
 
-## 文档
+## Tools UI
 
-| 文档 | 内容 |
-|------|------|
-| [Roadmap](docs/roadmap.md) | 项目演进路线 |
-| [内置插件](docs/plugins/built-in.md) | 开箱即用的内置插件介绍与配置 |
-| [插件路线](docs/plugins/roadmap.md) | 插件体系演进路线 |
-| [插件开发指南](docs/developer/plugin-dev.md) | 如何开发 Strait 插件 |
+Browser-based Playground and Pipeline Editor: https://yukk1o.github.io/Strait/
+
+## Documentation
+
+| Document | Content |
+|----------|---------|
+| [Comparison](docs/en/comparison.md) | Strait vs LiteLLM / Kong |
+| [Deployment](docs/en/deployment.md) | Docker, K8s, environment variables |
+| [Built-in Plugins](docs/en/plugins/built-in.md) | Included plugins and configuration |
+| [Plugin Dev Guide](docs/en/developer/plugin-dev.md) | How to write Strait plugins |
+| [Roadmap](docs/en/roadmap.md) | Project evolution plan |
+| [API Design](docs/en/api-design.md) | Public types and interface definitions |
 
 ## License
 
-Apache License 2.0
+[Apache License 2.0](LICENSE)
