@@ -1,5 +1,7 @@
 # Strait Roadmap
 
+[English](../en/roadmap.md) | 中文
+
 > AI 流经此处 — 插件驱动的 AI 网关
 
 ## 总体原则
@@ -22,9 +24,9 @@
 | **P2 生产可用性** | ✅ | 鉴权 + 错误模型 + 热重载 + 统一内部模型 + OpenAI 输出格式 |
 | **P3 Agent 协议** | ✅ | Function Calling + Tool Use + Tool Calls 响应 |
 | **P4 多供应商** | 🚧 | Ollama 适配 ✅ / 负载均衡（优先级/权重）✅ / Anthropic + Gemini 适配 ⏳ / 熔断 ⏳ |
-| **P5 管道扩展** | 🚧 | Guard / PreProcessor / PostProcessor 接口 ✅ + 模型分组路由 ⏳ |
+| **P5 管道扩展** | 🚧 | Guard / PreProcessor / PostProcessor 接口 ✅ + 插件描述符 ✅ + 失败策略 ✅ + StreamPostProcessor ✅ + 模型分组路由 ⏳ |
 | **P6 持久化** | ⏳ | SQLite + Repository 层 + 管理 API CRUD + Playground |
-| **P7 生产部署** | 🚧 | Docker ✅ + K8s 部署 ✅ + Prometheus /metrics ✅ + 优雅关闭 ✅ + 限流 ⏳ |
+| **P7 生产部署** | 🚧 | Docker ✅ + K8s 部署 ✅ + Prometheus /metrics ✅ + 优雅关闭 ✅ + CORS ✅ + 限流 ⏳ |
 | **P8 扩展协议** | ⏳ | Embedding 透传 / MCP 端点 / Rerank 适配 |
 
 ### 内核关键里程碑
@@ -51,6 +53,16 @@ Strait 所有组成部分都是插件——Router、Adapter、Authenticator、Gu
 | auth-static-token | Authenticator | ✅ | 静态 Token 鉴权 |
 | prompt-injector | PreProcessor | ✅ | 系统提示词自动注入 |
 
+### v0.3 新增能力
+
+- **插件描述符** — 插件通过 `Descriptor()` 声明类型、优先级、失败策略和配置 Schema，启动时自动生成 `manifest.json`
+- **失败策略** — strict（中断）/ skip（跳过）/ fallback（降级），由调度器统一处理
+- **StreamPostProcessor** — 流式响应后处理接口，直接操作 StreamChunk channel
+- **请求深拷贝隔离** — 管线入口自动深拷贝 ChatRequest，预处理器修改不影响原始 payload
+- **TraceID 全链路追踪** — 每个请求分配唯一标识，贯穿六个阶段，日志中可通过 `trace_id` 关联
+- **CORS 中间件** — 通过 `STRAIT_CORS_ORIGINS` 环境变量配置允许的来源
+- **配置合并** — 插件 `DefaultConfig` 与用户 `config` 自动合并
+
 ### 开发中
 
 | 插件 | 类型 | 计划 | 说明 |
@@ -67,6 +79,9 @@ Strait 所有组成部分都是插件——Router、Adapter、Authenticator、Gu
 
 | 文档 | 内容 |
 |------|------|
-| [内置插件](docs/plugins/built-in.md) | 所有内置插件的配置参考 |
-| [插件路线](docs/plugins/roadmap.md) | 插件的完整演进路线 |
-| [插件开发指南](docs/developer/plugin-dev.md) | 如何开发 Strait 插件 |
+| [内置插件](plugins/built-in.md) | 所有内置插件的配置参考 |
+| [插件路线](plugins/roadmap.md) | 插件的完整演进路线 |
+| [插件开发指南](developer/plugin-dev.md) | 如何开发 Strait 插件 |
+| [对比](comparison.md) | Strait vs LiteLLM / Kong |
+| [部署](deployment.md) | Docker、K8s、环境变量 |
+| [API 设计](api-design.md) | 公共类型和接口定义 |

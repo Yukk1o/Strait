@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ func NewServer(s *plugin.Scheduler, m *metrics.Metrics) *Server {
 	return &Server{scheduler: s, metrics: m}
 }
 
-// Handler 注册路由，返回 http.Handler
+// Handler 注册路由，返回 http.Handler（含 CORS 中间件）
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
@@ -40,7 +41,48 @@ func (s *Server) Handler() http.Handler {
 			slog.Error("write metrics failed", "error", err)
 		}
 	})
-	return mux
+	return corsMiddleware(mux)
+}
+
+// corsMiddleware 包装 http.Handler，添加 CORS 头并处理 OPTIONS 预检。
+// 通过 STRAIT_CORS_ORIGINS 环境变量配置允许的来源（逗号分隔）。
+// 未设置时允许所有来源（仅限开发环境）。
+func corsMiddleware(next http.Handler) http.Handler {
+	raw := os.Getenv("STRAIT_CORS_ORIGINS")
+	var allowed []string
+	if raw != "" {
+		for _, o := range strings.Split(raw, ",") {
+			if s := strings.TrimSpace(o); s != "" {
+				allowed = append(allowed, s)
+			}
+		}
+	} else {
+		slog.Warn("CORS: STRAIT_CORS_ORIGINS not set, allowing all origins (dev only)")
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if len(allowed) == 0 {
+			// 开发模式：允许所有
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" {
+			for _, o := range allowed {
+				if o == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Vary", "Origin")
+					break
+				}
+			}
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -84,9 +126,23 @@ func (s *Server) chatHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 3. 遍历 channel, 逐块写 SEE data 并 flush
+		// 3. 遍历 channel, 逐块写 SSE data 并 flush
 		first := true
 		for chunk := range ch {
+			if chunk.Err != nil {
+				errData, _ := json.Marshal(map[string]any{
+					"error": map[string]string{
+						"message": chunk.Err.Error(),
+						"type":    "server_error",
+					},
+				})
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", errData); err != nil {
+					slog.Error("write chunk failed", "error", err)
+				}
+				flusher.Flush()
+				return
+			}
+
 			slog.Debug("stream chunk", "chunk", chunk)
 			data, _ := json.Marshal(toOpenAIStreamChunk(reqID, start.Unix(), first, chunk))
 			first = false
@@ -96,7 +152,7 @@ func (s *Server) chatHandler(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 
-		// 4. 最后写 SEE 完成并 flush
+		// 4. 最后写 SSE 完成并 flush
 		slog.Info("stream done", "model", req.Model, "duration_ms", time.Since(start).Milliseconds())
 		if _, err := fmt.Fprintf(w, "data: [DONE]\n\n"); err != nil {
 			slog.Error("write chunk failed", "error", err)

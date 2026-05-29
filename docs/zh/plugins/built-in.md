@@ -1,6 +1,8 @@
 # 内置插件
 
-Strait 提供 4 个内置插件，启动即用。
+[English](../../en/plugins/built-in.md) | 中文
+
+Strait 提供 5 个内置插件，启动即用。
 
 ## 列表
 
@@ -10,6 +12,7 @@ Strait 提供 4 个内置插件，启动即用。
 | adapter-openai | Adapter | `plugins/adapter-openai/` | OpenAI 兼容协议适配 |
 | adapter-ollama | Adapter | `plugins/adapter-ollama/` | Ollama 本地模型适配 |
 | auth-static-token | Authenticator | `plugins/auth-static-token/` | 静态 Token 鉴权 |
+| prompt-injector | PreProcessor | `plugins/prompt-injector/` | 系统提示词自动注入 |
 
 ---
 
@@ -142,6 +145,7 @@ providers:
 plugins:
   - id: auth-static-token
     type: authenticator
+    priority: 10                      # 越小越先执行（默认 100）
     config:
       token: sk-admin-init            # 服务端校验的 token
       subject: admin                  # 鉴权通过后赋予的调用方标识
@@ -152,6 +156,28 @@ plugins:
 - **开发场景**：配置一个固定 token 即可，无需外部认证服务
 - **生产场景**：建议替换为 JWT / OAuth2 等自定义认证插件
 
+---
+
+## prompt-injector
+
+在请求到达 AI 前自动注入系统提示词。所有经过管线的请求都会被注入统一的 system prompt，客户端无需修改。
+
+```yaml
+# plugins.yaml
+plugins:
+  - id: prompt-injector
+    type: preprocessor
+    priority: 50                      # 在 guard 之后、route 之前执行
+    config:
+      system_prompt: "You are a helpful assistant."
+```
+
+- 自动在 messages 头部插入 `{"role": "system", "content": "..."}` 消息
+- 如果 messages 已有 system 消息，不会重复注入
+- 修改 `system_prompt` 后保存即热重载
+
+---
+
 ## 协议匹配机制
 
 Adapter 的选择是通过 `protocol` 字段串起来的：
@@ -161,3 +187,24 @@ Adapter.Protocol()  →  providers.yaml 的 protocol 字段
 ```
 
 例如：provider 声明 `protocol: openai`，Scheduler 会找到 `adapter-openai`（其 `Protocol()` 返回 `"openai"`）来执行请求。
+
+## 插件配置字段
+
+`plugins.yaml` 中每个插件支持以下字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 插件 ID，对应 `api.Register()` 注册名 |
+| `type` | string | 是 | 插件类型：`authenticator` / `guard` / `preprocessor` / `router` / `adapter` / `postprocessor` |
+| `priority` | int | 否 | 执行优先级，越小越先执行。默认取 `Descriptor()` 中的值，未声明则 100 |
+| `fail_mode` | string | 否 | 失败策略：`strict`（中断）/ `skip`（跳过）/ `fallback`（降级）。默认 `strict` |
+| `config` | map | 否 | 插件配置，与 `DefaultConfig` 合并后传入 `Init()` |
+
+## manifest.json
+
+启动时自动生成 `manifest.json`，汇总所有已加载插件的描述符。可用于：
+
+- Pipeline Editor 工具加载插件元数据，自动生成配置表单
+- 外部系统查询可用插件及其配置 Schema
+
+热重载时自动重新生成。

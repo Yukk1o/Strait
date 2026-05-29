@@ -1,5 +1,7 @@
 # 部署指南
 
+[English](../en/deployment.md) | 中文
+
 ## Docker
 
 ### 构建镜像
@@ -86,6 +88,16 @@ curl http://localhost:8080/health
 ```bash
 curl http://localhost:8080/metrics
 ```
+
+---
+
+## 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `STRAIT_CORS_ORIGINS` | 允许的 CORS 来源，逗号分隔 | 未设置时允许所有来源（仅限开发环境） |
+| `STRAIT_BANNER` | 设为 `false` 可关闭启动 Banner | 显示 |
+| `*_API_KEY` | 各供应商的 API Key（如 `DEEPSEEK_API_KEY`） | — |
 
 ---
 

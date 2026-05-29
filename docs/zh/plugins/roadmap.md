@@ -1,5 +1,7 @@
 # 插件路线
 
+[English](../../en/plugins/roadmap.md) | 中文
+
 > Strait 所有组成部分都是插件。统一走 `api.Register()` 注册、`plugins.yaml` 加载。
 
 ## 类型一览
@@ -21,6 +23,7 @@
 | adapter-openai | Adapter | OpenAI 兼容协议适配 |
 | adapter-ollama | Adapter | Ollama 本地模型适配 |
 | auth-static-token | Authenticator | 静态 Token 鉴权 |
+| prompt-injector | PreProcessor | 系统提示词自动注入 |
 
 ## 规划中
 
@@ -31,7 +34,6 @@
 | rate-limiter | Guard | Guard 接口 | 令牌桶 / 滑动窗口限流 |
 | ip-blocker | Guard | Guard 接口 | IP 白名单/黑名单 |
 | budget-check | Guard | Guard 接口 | 按 team/model 的预算熔断 |
-| prompt-injector | PreProcessor | PreProcessor 接口 | 系统提示词自动注入 |
 | pii-mask | PreProcessor | PreProcessor 接口 | 敏感信息脱敏 |
 | audit-logger | PostProcessor | PostProcessor 接口 | 全量请求-响应审计 |
 | cost-tracker | PostProcessor | PostProcessor 接口 | Token 用量和成本统计 |
@@ -41,6 +43,7 @@
 ```
 P3 Agent 协议 ──→ Adapter 接口保持不变
 P4 多供应商  ──→ adapter-anthropic / adapter-gemini
-P5 管道扩展  ──→ PreProcessor + PostProcessor 接口
-内核重构 TODO ──→ Guard 接口
+P5 管道扩展  ──→ Guard / PreProcessor / PostProcessor 接口 ✅
+               ──→ StreamPostProcessor 接口 ✅
+               ──→ 插件描述符 + 失败策略 ✅
 ```

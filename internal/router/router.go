@@ -63,6 +63,17 @@ func init() {
 	api.Register("router-yaml", func() api.Plugin { return &Router{} })
 }
 
+func (r *Router) Descriptor() api.PluginDescriptor {
+	return api.PluginDescriptor{
+		ID:          "router-yaml",
+		Type:        "router",
+		Description: "YAML 配置路由插件",
+		Version:     "0.3.0",
+		Priority:    100,
+		FailMode:    api.FailStrict,
+	}
+}
+
 func (r *Router) loadConfig() (map[string]providerYAML, []routeYAML, error) {
 	// 1. 读取并解析提供者配置
 	data, err := os.ReadFile(r.providersPath)
@@ -151,19 +162,19 @@ func (r *Router) Reload() error {
 	return nil
 }
 
-func (r *Router) Route(_ context.Context, model string) (*api.RouteDecision, error) {
+func (r *Router) Route(ctx context.Context, model string) (*api.RouteDecision, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for _, rt := range r.routes {
 		if rt.Match.Model == model {
-			return r.resolveRoute(rt, model)
+			return r.resolveRoute(ctx, rt, model)
 		}
 	}
 
 	for _, rt := range r.routes {
 		if strings.Contains(rt.Match.Model, "*") && matchModel(rt.Match.Model, model) {
-			return r.resolveRoute(rt, model)
+			return r.resolveRoute(ctx, rt, model)
 		}
 	}
 
@@ -174,7 +185,7 @@ func (r *Router) Route(_ context.Context, model string) (*api.RouteDecision, err
 	}
 }
 
-func (r *Router) resolveRoute(rt routeYAML, model string) (*api.RouteDecision, error) {
+func (r *Router) resolveRoute(ctx context.Context, rt routeYAML, model string) (*api.RouteDecision, error) {
 	// 获取 targets 列表
 	targets := rt.Targets
 	if len(targets) == 0 {
@@ -194,7 +205,14 @@ func (r *Router) resolveRoute(rt routeYAML, model string) (*api.RouteDecision, e
 			}
 		}
 
-		slog.Info("route selected", "route", rt.ID, "model", model, "provider", selected.Provider, "strategy", rt.Strategy)
+		slog.Info(
+			"route selected",
+			"trace_id", api.TraceIDFrom(ctx),
+			"route", rt.ID,
+			"model", model,
+			"provider", selected.Provider,
+			"strategy", rt.Strategy,
+		)
 
 		return &api.RouteDecision{
 			Protocol: p.Protocol,

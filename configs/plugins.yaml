@@ -5,6 +5,7 @@ plugins:
     type: adapter
   - id: auth-static-token
     type: authenticator
+    priority: 10
     config:
       token: sk-admin-init
       subject: admin
@@ -12,5 +13,6 @@ plugins:
     type: adapter
   - id: prompt-injector
     type: preprocessor
+    priority: 50
     config:
       system_prompt: "You are a helpful assistant."

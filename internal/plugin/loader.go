@@ -18,9 +18,11 @@ type Loader struct {
 
 // pluginEntry 插件配置项
 type pluginEntry struct {
-	ID     string         `yaml:"id"`     // 插件ID
-	Type   string         `yaml:"type"`   // 插件类型
-	Config map[string]any `yaml:"config"` // 插件配置
+	ID       string         `yaml:"id"`                  // 插件ID
+	Type     string         `yaml:"type"`                // 插件类型
+	Config   map[string]any `yaml:"config"`              // 插件配置
+	Priority *int           `yaml:"priority,omitempty"`  // 插件优先级
+	FailMode string         `yaml:"fail_mode,omitempty"` // 插件失败模式
 }
 
 // pluginConfig 插件配置
@@ -63,6 +65,8 @@ func (l *Loader) Build() (*Manager, error) {
 		m.SetRouter(router)
 	}
 
+	m.Sort()
+
 	return m, nil
 }
 
@@ -85,37 +89,48 @@ func (l *Loader) loadPlugin(entry pluginEntry, m *Manager, router *api.Router) e
 		return fmt.Errorf("plugin not registered: %s", entry.ID)
 	}
 
-	if err := p.Init(entry.Config); err != nil {
+	desc := api.Describe(p)
+	if entry.Priority != nil {
+		desc.Priority = *entry.Priority
+	}
+	if entry.FailMode != "" {
+		desc.FailMode = api.FailMode(entry.FailMode)
+	}
+
+	cfg := mergeConfig(desc.DefaultConfig, entry.Config)
+
+	if err := p.Init(cfg); err != nil {
 		return fmt.Errorf("plugin %s init failed: %w", entry.ID, err)
 	}
 
-	if err := registerPlugin(entry, p, m, router); err != nil {
+	if err := registerPlugin(entry, p, m, router, desc); err != nil {
 		return err
 	}
 	return nil
 }
 
 // registerPlugin 注册插件
-func registerPlugin(entry pluginEntry, p api.Plugin, m *Manager, router *api.Router) error {
+func registerPlugin(entry pluginEntry, p api.Plugin, m *Manager, router *api.Router, desc api.PluginDescriptor) error {
 	switch entry.Type {
 	case "authenticator":
 		auth, ok := p.(api.Authenticator)
 		if !ok {
 			return fmt.Errorf("plugin %s is not an Authenticator", entry.ID)
 		}
-		m.AddAuthenticator(auth)
+
+		m.AddAuthenticator(auth, desc)
 	case "guard":
 		guard, ok := p.(api.Guard)
 		if !ok {
 			return fmt.Errorf("plugin %s is not a Guard", entry.ID)
 		}
-		m.AddGuard(guard)
+		m.AddGuard(guard, desc)
 	case "preprocessor":
 		pre, ok := p.(api.PreProcessor)
 		if !ok {
 			return fmt.Errorf("plugin %s is not a PreProcessor", entry.ID)
 		}
-		m.AddPreProcessor(pre)
+		m.AddPreProcessor(pre, desc)
 	case "router":
 		r, ok := p.(api.Router)
 		if !ok {
@@ -127,7 +142,13 @@ func registerPlugin(entry pluginEntry, p api.Plugin, m *Manager, router *api.Rou
 		if !ok {
 			return fmt.Errorf("plugin %s is not a PostProcessor", entry.ID)
 		}
-		m.AddPostProcessor(post)
+		if _, ok := p.(api.StreamPostProcessor); !ok {
+			slog.Warn(
+				"PostProcessor does not implement StreamPostProcessor, will be skipped in stream mode",
+				"plugin", entry.ID,
+			)
+		}
+		m.AddPostProcessor(post, desc)
 	case "adapter":
 		a, ok := p.(api.ChatAdapter)
 		if !ok {
@@ -143,4 +164,21 @@ func registerPlugin(entry pluginEntry, p api.Plugin, m *Manager, router *api.Rou
 	}
 	slog.Debug(entry.Type+" plugin loaded", "id", entry.ID)
 	return nil
+}
+
+func mergeConfig(base, override map[string]any) map[string]any {
+	if len(base) == 0 {
+		return override
+	}
+	if len(override) == 0 {
+		return base
+	}
+	merged := make(map[string]any, len(base))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range override {
+		merged[k] = v
+	}
+	return merged
 }

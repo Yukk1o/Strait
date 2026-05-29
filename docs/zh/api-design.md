@@ -1,5 +1,7 @@
 # API 设计文档
 
+[English](../en/api-design.md) | 中文
+
 > 所有 API 遵循 RESTful 风格，统一响应格式，支持分页和过滤
 
 ## 1. 统一响应格式
